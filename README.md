@@ -16,6 +16,6 @@
 | Mohamed Ali Mohamed Ali | ********     |
 
 ## Log🔍
-([proposal](https://github.com/Ammar076/Foodi/tree/main/Project%20%20Proposal))<br>
+([Proposal](https://github.com/Ammar076/Foodi/tree/main/Project%20%20Proposal))<br>
 ([Problem Analysis and Design](https://github.com/Ammar076/Foodi/tree/main/Analysis%20Design))<br>
 ([Final Submission](https://github.com/Ammar076/Foodi/tree/main/Final%20Submission))
