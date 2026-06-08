@@ -1,0 +1,406 @@
+/* ============================================================
+   Foodi — Qt Style Sheet
+   Implements the Claude-Design "warm-neutral, teal, soft-corner"
+   system. QSS has no CSS custom properties, so the design tokens
+   from foodi.css are resolved to literal values here.
+
+   Token reference (kept in sync with the design's :root):
+     brand        #1a857a   brand-hover  #14716a   brand-active #0f5b54
+     brand-tint   #e6f2f0   on-brand     #ffffff
+     page         #f1efe9   surface      #ffffff   surface-2    #f8f6f1
+     surface-3    #efece5   border       #e4ded3   border-strong#d6cfc2
+     ink          #2c2926   ink-2        #6c665d   ink-3        #9a948b
+     unsafe #c0392b / ink #a5301f / bg #fbeae7 / bd #f0c8c1
+     caution#e67e22 / ink #a65f0f / bg #fcefe0 / bd #f3d9b3
+     safe   #27ae60 / ink #1c8048 / bg #e7f4ec / bd #c3e3cf
+     radius 6px   radius-lg 8px
+   ============================================================ */
+
+/* ---- base ---------------------------------------------------- */
+QWidget {
+    font-family: "Segoe UI";
+    font-size: 13px;
+    color: #2c2926;
+}
+QLabel { background: transparent; }
+
+QMainWindow, QDialog, #loginRoot, #pageRoot {
+    background: #f1efe9;
+}
+
+/* tooltips */
+QToolTip {
+    background: #2c2926;
+    color: #ffffff;
+    border: none;
+    padding: 5px 8px;
+    border-radius: 4px;
+}
+
+/* ============================================================
+   TOP BAR  (brandmark · Foods | Profile · Log out)
+   ============================================================ */
+#topBar {
+    background: #ffffff;
+    border-bottom: 1px solid #e4ded3;
+}
+#brandWord {
+    font-size: 16px;
+    font-weight: 700;
+    color: #2c2926;
+}
+/* segmented nav pill container */
+#navGroup {
+    background: #f8f6f1;
+    border: 1px solid #e4ded3;
+    border-radius: 6px;
+}
+QPushButton#navBtn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: #6c665d;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 5px 14px;
+}
+QPushButton#navBtn:hover { color: #2c2926; background: #efece5; }
+QPushButton#navBtn:checked {
+    color: #1a857a;
+    background: #ffffff;
+    border: 1px solid #e4ded3;
+    font-weight: 600;
+}
+
+/* ============================================================
+   PAGE TYPOGRAPHY
+   ============================================================ */
+#pageTitle {
+    font-size: 21px;
+    font-weight: 600;
+    color: #2c2926;
+}
+#pageSub {
+    font-size: 13px;
+    color: #6c665d;
+}
+#eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    color: #9a948b;
+}
+/* loading / empty in-card state titles */
+#stateTitle {
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c2926;
+}
+#authTitle {
+    font-size: 22px;
+    font-weight: 600;
+    color: #2c2926;
+}
+
+/* ============================================================
+   CARD / GROUP BOX  (ui/Card)
+   ============================================================ */
+#card {
+    background: #ffffff;
+    border: 1px solid #e4ded3;
+    border-radius: 8px;
+}
+#cardHeader {
+    background: #f8f6f1;
+    border-bottom: 1px solid #e4ded3;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #2c2926;
+    padding: 12px 16px;
+}
+
+/* warm panel that wraps the onboarding allergen grid */
+#softPanel {
+    background: #f8f6f1;
+    border: 1px solid #e4ded3;
+    border-radius: 6px;
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+QPushButton {
+    background: #ffffff;
+    color: #2c2926;
+    border: 1px solid #d6cfc2;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 18px;
+}
+QPushButton:hover { background: #f8f6f1; }
+QPushButton:pressed { background: #efece5; }
+QPushButton:disabled { color: #9a948b; border-color: #e4ded3; }
+
+QPushButton[kind="primary"] {
+    background: #1a857a;
+    color: #ffffff;
+    border: 1px solid #1a857a;
+}
+QPushButton[kind="primary"]:hover  { background: #14716a; border-color: #14716a; }
+QPushButton[kind="primary"]:pressed{ background: #0f5b54; border-color: #0f5b54; }
+QPushButton[kind="primary"]:disabled { background: #d6cfc2; border-color: #d6cfc2; color: #ffffff; }
+
+QPushButton[kind="ghost"] {
+    background: transparent;
+    color: #6c665d;
+    border: 1px solid transparent;
+    padding: 6px 12px;
+}
+QPushButton[kind="ghost"]:hover { background: #efece5; color: #2c2926; }
+
+/* inline text link (e.g. "Forgot password?") */
+QPushButton#linkBtn {
+    background: transparent;
+    border: none;
+    color: #1a857a;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 0;
+}
+QPushButton#linkBtn:hover { color: #14716a; text-decoration: underline; }
+
+/* ============================================================
+   TEXT INPUTS
+   ============================================================ */
+#fieldLabel {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6c665d;
+}
+#fieldHint {
+    font-size: 12px;
+    color: #9a948b;
+}
+QLineEdit {
+    background: #ffffff;
+    border: 1px solid #d6cfc2;
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: #2c2926;
+    selection-background-color: #e6f2f0;
+    selection-color: #2c2926;
+}
+QLineEdit:hover { border-color: #c6bfb1; }
+/* focus: 2px brand border (QSS can't do the design's soft box-shadow glow);
+   padding drops 1px to keep the field from shifting when the border grows */
+QLineEdit:focus { border: 2px solid #1a857a; padding: 7px 11px; }
+QLineEdit:disabled { background: #f8f6f1; color: #9a948b; }
+QLineEdit[invalid="true"] { border: 1px solid #c0392b; }
+
+/* ============================================================
+   COMBO BOX  (category / diet filters)
+   ============================================================ */
+QComboBox {
+    background: #ffffff;
+    border: 1px solid #d6cfc2;
+    border-radius: 6px;
+    padding: 7px 10px;
+    color: #2c2926;
+    min-height: 20px;
+}
+QComboBox:hover { border-color: #c6bfb1; }
+QComboBox:focus { border: 2px solid #1a857a; padding: 6px 9px; }
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    width: 22px;
+    border: none;
+}
+QComboBox QAbstractItemView {
+    background: #ffffff;
+    border: 1px solid #d6cfc2;
+    border-radius: 6px;
+    outline: none;
+    padding: 4px;
+    selection-background-color: #e6f2f0;
+    selection-color: #2c2926;
+}
+
+/* ============================================================
+   CHECKBOX  (allergen lists)
+   ============================================================ */
+QCheckBox {
+    color: #2c2926;
+    spacing: 9px;
+    padding: 3px 0;
+}
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1px solid #d6cfc2;
+    border-radius: 5px;
+    background: #ffffff;
+}
+QCheckBox::indicator:hover { border: 1px solid #1a857a; }
+QCheckBox::indicator:checked {
+    background: #1a857a;
+    border: 1px solid #1a857a;
+    image: url(:/icons/check.png);
+}
+QCheckBox::indicator:disabled { background: #f8f6f1; border: 1px solid #e4ded3; }
+QCheckBox:disabled { color: #9a948b; }
+
+/* ============================================================
+   AUTH TABS  (Sign in / Create account) — segmented control
+   ============================================================ */
+#authTabs {
+    background: #f8f6f1;
+    border: 1px solid #e4ded3;
+    border-radius: 6px;
+}
+QPushButton#authTab {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: #6c665d;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 0;
+}
+QPushButton#authTab:hover { color: #2c2926; background: #efece5; }
+QPushButton#authTab:checked {
+    color: #1a857a;
+    background: #ffffff;
+    border: 1px solid #e4ded3;
+}
+
+/* ============================================================
+   TABLE  (results)
+   ============================================================ */
+QTableWidget, QTableView {
+    background: #ffffff;
+    alternate-background-color: #ffffff;
+    border: none;
+    gridline-color: transparent;
+    outline: none;
+}
+QHeaderView::section {
+    background: #f8f6f1;
+    color: #6c665d;
+    padding: 8px 12px;
+    border: none;
+    border-bottom: 1px solid #e4ded3;
+    font-size: 12px;
+    font-weight: 600;
+}
+QTableView::item {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e4ded3;
+    color: #2c2926;
+}
+QTableView::item:hover { background: #f8f6f1; }
+QTableView::item:selected { background: #e6f2f0; color: #2c2926; }
+
+/* footer status line under the table */
+#statusBar {
+    background: #f8f6f1;
+    border-top: 1px solid #e4ded3;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+    color: #6c665d;
+    font-size: 12px;
+    padding: 9px 14px;
+}
+
+/* ============================================================
+   SAFETY BADGE  (icon glyph + word — never colour alone)
+   created in code as QLabel#badge with a [state] property
+   ============================================================ */
+QLabel#badge {
+    border-radius: 11px;
+    padding: 3px 11px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid transparent;
+}
+QLabel#badge[state="safe"]    { background: #e7f4ec; color: #1c8048; border: 1px solid #c3e3cf; }
+QLabel#badge[state="caution"] { background: #fcefe0; color: #a65f0f; border: 1px solid #f3d9b3; }
+QLabel#badge[state="unsafe"]  { background: #fbeae7; color: #a5301f; border: 1px solid #f0c8c1; }
+QLabel#badge[state="info"]    { background: #f8f6f1; color: #6c665d; border: 1px solid #e4ded3; }
+QLabel#badge[size="lg"] {
+    border-radius: 13px;
+    padding: 7px 16px;
+    font-size: 15px;
+}
+
+/* ============================================================
+   VERDICT PANEL  (food detail)  QFrame#verdict[state=...]
+   ============================================================ */
+#verdict { border-radius: 6px; }
+#verdict[state="safe"]    { background: #e7f4ec; border: 1px solid #c3e3cf; }
+#verdict[state="caution"] { background: #fcefe0; border: 1px solid #f3d9b3; }
+#verdict[state="unsafe"]  { background: #fbeae7; border: 1px solid #f0c8c1; }
+#verdictTitle    { font-size: 14px; font-weight: 700; }
+#verdictSub      { font-size: 12px; }
+#verdictGlyph    { font-size: 17px; font-weight: 700; }
+#verdict[state="safe"]    #verdictTitle, #verdict[state="safe"]    #verdictSub, #verdict[state="safe"]    #verdictGlyph { color: #1c8048; }
+#verdict[state="caution"] #verdictTitle, #verdict[state="caution"] #verdictSub, #verdict[state="caution"] #verdictGlyph { color: #a65f0f; }
+#verdict[state="unsafe"]  #verdictTitle, #verdict[state="unsafe"]  #verdictSub, #verdict[state="unsafe"]  #verdictGlyph { color: #a5301f; }
+
+/* image placeholder for the detail dialog */
+#imgPlaceholder {
+    background: #f4f1ea;
+    border: 1px solid #e4ded3;
+    border-radius: 6px;
+    color: #9a948b;
+    font-size: 12px;
+}
+#ingredients { font-size: 13px; color: #6c665d; }
+#detailMeta  { font-size: 13px; color: #6c665d; }
+
+/* ============================================================
+   STATUS / MESSAGE TEXT
+   ============================================================ */
+#statusText { font-size: 12px; }
+#statusText[tone="neutral"] { color: #6c665d; }
+#statusText[tone="success"] { color: #1c8048; }
+#statusText[tone="error"]   { color: #a5301f; }
+
+/* ============================================================
+   SCROLLBARS
+   ============================================================ */
+QScrollArea { border: none; background: transparent; }
+QScrollBar:vertical {
+    background: transparent;
+    width: 12px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: #d6cfc2;
+    border-radius: 5px;
+    min-height: 28px;
+    margin: 2px;
+}
+QScrollBar::handle:vertical:hover { background: #c6bfb1; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+QScrollBar:horizontal {
+    background: transparent;
+    height: 12px;
+    margin: 0;
+}
+QScrollBar::handle:horizontal {
+    background: #d6cfc2;
+    border-radius: 5px;
+    min-width: 28px;
+    margin: 2px;
+}
+QScrollBar::handle:horizontal:hover { background: #c6bfb1; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }
+
+/* The little square where the two scrollbars meet — keep it transparent so it
+   doesn't paint a stray block next to the table. */
+QAbstractScrollArea::corner { background: transparent; border: none; }
