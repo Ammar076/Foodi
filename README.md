@@ -8,7 +8,7 @@ The original single-file console app (2023/2024) lives in [`old version/`](old%2
 
 ## Features
 
-- **Allergen profiles** — pick from the EU-14 canonical allergens (covers the US Big-9 and more); saved to your cloud account so any device can use them
+- **Allergen profiles** — pick from the EU-14 canonical allergens; saved to your account so any device can use them
 - **Live food search** — queries Open Food Facts, cached server-side so repeat searches are instant
 - **Three-tier verdict** — Unsafe (contains your allergen) / Caution (traces only) / Safe, shown per product and per allergen
 - **Forgot password** — real email reset via SMTP; tokens are single-use, time-limited, and brute-force capped
@@ -137,10 +137,6 @@ Foodi/
 │       ├── core/               # Session (shared state)
 │       ├── net/                # ApiClient (QNetworkAccessManager)
 │       └── ui/                 # all screens and widgets
-├── planning/                   # Architecture and setup docs
-│   ├── DESIGN.md
-│   ├── REVIEW.md               # review of the original console app
-│   └── SETUP.md                # detailed dev environment setup
 └── old version/                # original 2023/2024 console app
 ```
 
