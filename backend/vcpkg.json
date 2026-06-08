@@ -1,0 +1,14 @@
+{
+  "name": "foodi-backend",
+  "version-string": "0.1.0",
+  "builtin-baseline": "c16c1bd46c7f6de21efc6dcf19c1069d6825df23",
+  "dependencies": [
+    {
+      "name": "drogon",
+      "features": ["ctl", "postgres"]
+    },
+    "libsodium",
+    "jwt-cpp",
+    "curl"
+  ]
+}
