@@ -1,0 +1,26 @@
+# Build output
+build/
+out/
+cmake-build-*/
+backend/build/
+client/build/
+*.log
+
+# vcpkg
+vcpkg_installed/
+
+# Local config / secrets (never commit)
+config.json
+backend/config.json
+.env
+*.env
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.user
+
+# OS
+Thumbs.db
+.DS_Store
