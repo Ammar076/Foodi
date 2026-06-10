@@ -31,6 +31,15 @@ add_executable(foodi_client
 target_include_directories(foodi_client PRIVATE src)
 target_link_libraries(foodi_client PRIVATE Qt6::Widgets Qt6::Network)
 
+# Backend URL baked into the build. Dev default is localhost; for the release that
+# talks to the hosted backend, configure with:
+#   cmake --preset default -DFOODI_API_URL=https://your-backend.onrender.com
+# A FOODI_API_URL environment variable overrides this at runtime.
+if (NOT FOODI_API_URL)
+    set(FOODI_API_URL "http://127.0.0.1:8080")
+endif()
+target_compile_definitions(foodi_client PRIVATE FOODI_DEFAULT_API_URL="${FOODI_API_URL}")
+
 # On Windows, copy the needed Qt runtime DLLs next to the .exe so it launches
 # without Qt being on PATH (windeployqt ships with the Qt kit).
 if (WIN32)
