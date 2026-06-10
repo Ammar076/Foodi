@@ -1,7 +1,4 @@
 {
-  "listeners": [
-    { "address": "0.0.0.0", "port": 8080 }
-  ],
   "app": {
     "threads_num": 4
   },
@@ -13,6 +10,8 @@
     "jwt_expiry_hours": 1,
     "off_base_url": "https://uk.openfoodfacts.org",
     "off_user_agent": "Foodi/0.1 (your-contact@example.com)",
+
+    "spoonacular_api_key": "FILL_ME",
 
     "reset_code_ttl_minutes": 30,
 
