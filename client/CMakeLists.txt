@@ -34,6 +34,9 @@ add_executable(foodi_client WIN32
 target_include_directories(foodi_client PRIVATE src)
 target_link_libraries(foodi_client PRIVATE Qt6::Widgets Qt6::Network)
 
+# Ship the binary as Foodi.exe (the CMake target stays foodi_client internally).
+set_target_properties(foodi_client PROPERTIES OUTPUT_NAME "Foodi")
+
 # Backend URL baked into the build. Dev default is localhost; for the release that
 # talks to the hosted backend, configure with:
 #   cmake --preset default -DFOODI_API_URL=https://your-backend.onrender.com
