@@ -1,5 +1,6 @@
 #include "ui/ProfilePage.h"
 
+#include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QJsonArray>
@@ -17,6 +18,7 @@
 #include "net/ApiClient.h"
 #include "ui/AllergenPicker.h"
 #include "ui/Card.h"
+#include "ui/Theme.h"
 
 namespace {
 // A label-above-input field group; returns the container and hands back the edit.
@@ -99,6 +101,36 @@ ProfilePage::ProfilePage(ApiClient *api, Session *session, QWidget *parent)
     alCard->body()->addWidget(picker_);
     alCard->body()->addLayout(alBtnRow);
 
+    // --- Appearance card (theme) ---
+    auto *appCard = new Card("Appearance");
+    auto *appHint = new QLabel("Choose how Foodi looks. Default follows your system setting.");
+    appHint->setObjectName("fieldHint");
+    appHint->setWordWrap(true);
+    auto *themeGroup = new QFrame(appCard);
+    themeGroup->setObjectName("navGroup");
+    themeGroup->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    auto *themeLay = new QHBoxLayout(themeGroup);
+    themeLay->setContentsMargins(3, 3, 3, 3);
+    themeLay->setSpacing(2);
+    struct ThemeOpt { const char *label; theme::Mode mode; };
+    const ThemeOpt themeOpts[] = {{"Default", theme::Mode::System},
+                                  {"Light", theme::Mode::Light},
+                                  {"Dark", theme::Mode::Dark}};
+    const theme::Mode curMode = theme::savedMode();
+    for (const auto &opt : themeOpts) {
+        auto *b = new QPushButton(opt.label, themeGroup);
+        b->setObjectName("navBtn");
+        b->setCheckable(true);
+        b->setAutoExclusive(true);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setChecked(opt.mode == curMode);
+        const theme::Mode m = opt.mode;
+        connect(b, &QPushButton::clicked, this, [m]() { theme::setMode(m); });
+        themeLay->addWidget(b);
+    }
+    appCard->body()->addWidget(appHint);
+    appCard->body()->addWidget(themeGroup, 0, Qt::AlignLeft);
+
     status_ = new QLabel(this);
     status_->setObjectName("statusText");
     status_->setProperty("tone", "neutral");
@@ -115,6 +147,7 @@ ProfilePage::ProfilePage(ApiClient *api, Session *session, QWidget *parent)
     colLay->addWidget(accCard);
     colLay->addWidget(pwCard);
     colLay->addWidget(alCard);
+    colLay->addWidget(appCard);
     colLay->addWidget(status_);
     colLay->addStretch();
 
