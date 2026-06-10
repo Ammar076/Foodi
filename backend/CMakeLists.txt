@@ -20,6 +20,7 @@ add_executable(foodi_backend
     src/controllers/MeController.cpp
     src/controllers/FoodController.cpp
     src/services/OffClient.cpp
+    src/services/SpoonacularClient.cpp
     src/services/FoodIngest.cpp
     src/services/EmailClient.cpp
 )

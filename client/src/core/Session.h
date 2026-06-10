@@ -3,12 +3,18 @@
 #include <QSettings>
 #include <QString>
 
+// Backend URL is baked in at build time (CMake FOODI_API_URL); defaults to
+// localhost for dev builds. main() additionally honours a FOODI_API_URL env var.
+#ifndef FOODI_DEFAULT_API_URL
+#define FOODI_DEFAULT_API_URL "http://127.0.0.1:8080"
+#endif
+
 // Holds auth state + the current user for the lifetime of the app. Shared by
 // pointer between the API client and the windows so everyone reads the same
 // token/user. The token lives in memory; "Remember me" additionally persists it
 // via QSettings so a returning user is auto-validated on launch (see main()).
 struct Session {
-    QString baseUrl = QStringLiteral("http://127.0.0.1:8080");
+    QString baseUrl = QStringLiteral(FOODI_DEFAULT_API_URL);
     QString token;
     int userId = 0;
     QString username;

@@ -1,25 +1,39 @@
 #pragma once
+#include <QColor>
 #include <QIcon>
 #include <QPixmap>
 #include <QString>
 
 class QApplication;
 
-// App-wide visual theme. Centralises the design tokens that can't live in the
-// .qss (the runtime-drawn brand mark and search glyph) and the one-time setup
-// that installs the stylesheet. Colours mirror resources/foodi.qss.
+// App-wide visual theme. Supports three modes (System / Light / Dark): the .qss is
+// a template with @{token} colour placeholders that we substitute from a light or
+// dark colour map at runtime, alongside a matching QPalette. Runtime-drawn marks
+// (brand tile, glyphs) read their colours from the active map too.
 namespace theme {
 
-// Brand palette (kept in sync with foodi.qss / the design's :root).
-inline const char *kBrand = "#1a857a";
-inline const char *kInk3 = "#9a948b";
+enum class Mode { System, Light, Dark };
 
-// Switch to the Fusion base style (so QSS is honoured uniformly across
-// platforms), set the UI font, and load resources/foodi.qss onto the app.
+// One-time setup: switch to the Fusion base style, install the persisted theme
+// (palette + stylesheet + font + icon), and start following the OS theme when the
+// mode is System. Call once at startup.
 void apply(QApplication &app);
 
-// The Foodi mark: a rounded teal tile with a white check. Drawn at runtime so it
-// stays crisp at any DPI and needs no PNG asset. `px` is the logical edge length.
+// Persist a new mode and re-apply it live to the running app.
+void setMode(Mode mode);
+
+// The user's persisted choice (defaults to System on first run).
+Mode savedMode();
+
+// The effective theme after resolving System against the OS (true = dark).
+bool isDark();
+
+// Active-theme colour for a token (e.g. "ink", "brand", "unsafeInk"). Used by the
+// widgets we paint in C++ instead of QSS. Returns magenta if the token is unknown.
+QColor color(const QString &token);
+
+// Brand mark: a rounded teal tile with a white check, drawn at runtime so it stays
+// crisp at any DPI. `px` is the logical edge length.
 QPixmap appTile(int px);
 QIcon appIcon();
 

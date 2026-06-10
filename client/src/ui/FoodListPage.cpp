@@ -5,11 +5,16 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QIcon>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QPixmap>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollBar>
@@ -35,12 +40,38 @@ QString joinNames(const QJsonArray &arr)
     return l.join(", ");
 }
 
+// Open Food Facts / recipe sources hand us names in inconsistent casing
+// ("FLAMED BAKED PIZZA BASED", "classic margh pizza"). Title-case the ones that
+// are entirely upper- or entirely lower-case; leave mixed-case names (e.g.
+// "GF Pizza Base") untouched so we don't mangle real capitalization.
+QString tidyName(const QString &s)
+{
+    bool hasLower = false, hasUpper = false;
+    for (const QChar &c : s) {
+        if (c.isLower())
+            hasLower = true;
+        else if (c.isUpper())
+            hasUpper = true;
+    }
+    if (hasLower && hasUpper)
+        return s;
+    QStringList words = s.split(' ', Qt::SkipEmptyParts);
+    for (QString &w : words) {
+        w = w.toLower();
+        if (!w.isEmpty())
+            w[0] = w[0].toUpper();
+    }
+    return words.join(' ');
+}
+
+// Column indices for the results table.
+enum Col { ColImage = 0, ColName, ColType, ColBrand, ColAllergens, ColStatus, ColCount };
+
 // Table tuned for the food list in two ways:
 //
 // 1) Column widths (resizeEvent): the Product column has priority — it grows to
-//    fill wide windows, and when space runs out Category then Brand give way,
-//    instead of Product collapsing to a couple of letters (what a Stretch column
-//    does). Status/allergens stay fixed so the badge never clips.
+//    fill wide windows, and when space runs out Allergens, then Brand, then Type
+//    give way, instead of Product collapsing. Image/Status stay fixed.
 //
 // 2) Header + scrollbar geometry (updateGeometries): by default Qt runs the
 //    vertical scrollbar the full height of the table — alongside the header row —
@@ -68,12 +99,9 @@ protected:
             return;
 
         const int headerH = hh->height();
-        // Header spans the full width (covers the scrollbar gutter); stretchLast-
-        // Section then grows Status to the edge.
         const int fullW = viewport()->width() + vb->width();
         if (hh->width() != fullW)
             hh->setGeometry(hh->x(), hh->y(), fullW, headerH);
-        // Scrollbar starts just below the header.
         const int top = hh->y() + headerH;
         if (vb->y() != top) {
             const int bottom = vb->geometry().bottom();
@@ -89,48 +117,89 @@ private:
         if (total <= 0)
             return;
 
-        const int status = 130;     // Status fills the remainder via stretchLastSection
-        const int allergens = 160;  // kept fixed
-        int brand = 130;
-        int category = 160;
-        const int productMin = 200;
+        const int image = 52;    // thumbnail
+        const int status = 120;  // Status fills the remainder via stretchLastSection
+        int type = 92;
+        int brand = 120;
 
-        int product = total - status - allergens - brand - category;
+        // Product and Your-allergens share the leftover space. Allergens carries the
+        // long EU-14 names ("Cereals containing gluten"), so it gets a real share
+        // (~40%, capped) rather than a thin fixed strip — Product no longer eats it.
+        int rest = total - image - status - type - brand;
+        int allergens = qBound(180, rest * 40 / 100, 320);
+        int product = rest - allergens;
+
+        const int productMin = 200;
         if (product < productMin) {
-            // Keep Product readable; take the deficit from Category, then Brand.
-            int deficit = productMin - product;
+            // Narrow window: protect Product, then claw width back for Allergens
+            // from Brand and Type so it never collapses to a couple of letters.
             product = productMin;
-            auto shrink = [&deficit](int &col, int floor) {
-                const int take = qMin(deficit, col - floor);
+            allergens = rest - product;
+            auto reclaim = [&](int &col, int floor) {
+                if (allergens >= 150)
+                    return;
+                const int take = qMin(150 - allergens, col - floor);
                 if (take > 0) {
                     col -= take;
-                    deficit -= take;
+                    allergens += take;
                 }
             };
-            shrink(category, 70);
-            shrink(brand, 60);
+            reclaim(brand, 70);
+            reclaim(type, 70);
+            if (allergens < 90)
+                allergens = 90;
+            product = total - image - status - type - brand - allergens;
+            if (product < 130)
+                product = 130;
         }
-        setColumnWidth(0, product);
-        setColumnWidth(1, brand);
-        setColumnWidth(2, category);
-        setColumnWidth(3, allergens);
-        // Column 4 (Status) is the stretch-last section.
+        setColumnWidth(ColImage, image);
+        setColumnWidth(ColName, product);
+        setColumnWidth(ColType, type);
+        setColumnWidth(ColBrand, brand);
+        setColumnWidth(ColAllergens, allergens);
+        // Status is the stretch-last section.
     }
 };
 }  // namespace
 
 FoodListPage::FoodListPage(ApiClient *api, Session *session, QWidget *parent)
-    : QWidget(parent), api_(api), session_(session)
+    : QWidget(parent), api_(api), session_(session),
+      imgNam_(new QNetworkAccessManager(this))
 {
     // --- page heading ---
     auto *title = new QLabel("Foods", this);
     title->setObjectName("pageTitle");
-    auto *sub = new QLabel("Search a product to see if it's safe for you.", this);
+    auto *sub = new QLabel("Search groceries or recipes to see if they're safe for you.", this);
     sub->setObjectName("pageSub");
+
+    // --- source toggle (All / Groceries / Recipes) ---
+    auto *srcGroup = new QFrame(this);
+    srcGroup->setObjectName("navGroup");
+    auto *srcLay = new QHBoxLayout(srcGroup);
+    srcLay->setContentsMargins(3, 3, 3, 3);
+    srcLay->setSpacing(2);
+    auto makeSeg = [&](const QString &text, bool checked) {
+        auto *b = new QPushButton(text, srcGroup);
+        b->setObjectName("navBtn");
+        b->setCheckable(true);
+        b->setAutoExclusive(true);
+        b->setChecked(checked);
+        b->setCursor(Qt::PointingHandCursor);
+        srcLay->addWidget(b);
+        connect(b, &QPushButton::clicked, this, &FoodListPage::runSearch);
+        return b;
+    };
+    srcAll_ = makeSeg("All", true);
+    srcGrocery_ = makeSeg("Groceries", false);
+    srcRecipe_ = makeSeg("Recipes", false);
+
+    auto *srcRow = new QHBoxLayout;
+    srcRow->addWidget(srcGroup, 0, Qt::AlignLeft);
+    srcRow->addStretch();
 
     // --- filter bar ---
     search_ = new QLineEdit(this);
-    search_->setPlaceholderText("Search foods, brands…");
+    search_->setPlaceholderText("Search foods, brands, dishes…");
     search_->setClearButtonEnabled(true);
     search_->addAction(theme::searchIcon(), QLineEdit::LeadingPosition);
 
@@ -152,39 +221,46 @@ FoodListPage::FoodListPage(ApiClient *api, Session *session, QWidget *parent)
     filters->addWidget(searchBtn_);
 
     // --- results table ---
-    table_ = new FoodTable(0, 5, this);
+    auto *t = new FoodTable(0, ColCount, this);
+    table_ = t;
     table_->setHorizontalHeaderLabels(
-        {"Product", "Brand", "Category", "Your allergens", "Status"});
+        {"", "Product", "Type", "Brand", "Your allergens", "Status"});
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
     table_->setShowGrid(false);
     table_->setWordWrap(false);
-    table_->setTextElideMode(Qt::ElideRight);  // long names/categories get a trailing "…"
+    table_->setTextElideMode(Qt::ElideRight);
+    table_->setIconSize(QSize(38, 38));
     table_->verticalHeader()->setVisible(false);
-    table_->verticalHeader()->setDefaultSectionSize(42);
+    table_->verticalHeader()->setDefaultSectionSize(48);
     table_->horizontalHeader()->setHighlightSections(false);
-    // Widths are driven by FoodTable::resizeEvent (Product keeps priority); Interactive
-    // mode makes the header honor those widths instead of auto-fitting to content.
-    // The last section (Status) stretches to fill the full-width header (see
-    // FoodTable::updateGeometries) so it reaches the right edge past the scrollbar.
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     table_->horizontalHeader()->setStretchLastSection(true);
-    // Columns always fit (Product flexes, the rest elide), so horizontal scrolling
-    // is never needed. Turning it off also avoids a phantom scrollbar from the
-    // full-width header making the Status section a few px wider than the viewport.
     table_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     table_->setFrameShape(QFrame::NoFrame);
 
-    status_ = new QLabel(this);
-    status_->setObjectName("statusBar");
+    loadMoreBtn_ = new QPushButton("Load more", this);
+    loadMoreBtn_->setCursor(Qt::PointingHandCursor);
+    connect(loadMoreBtn_, &QPushButton::clicked, this, &FoodListPage::loadMore);
+    // Footer band: the button sits vertically centered inside it, so it floats with
+    // breathing room instead of being pinned to the card's bottom edge. The whole
+    // band collapses (hidden → no layout space) when there are no more pages.
+    auto *moreBand = new QWidget;
+    auto *moreLay = new QVBoxLayout(moreBand);
+    moreLay->setContentsMargins(0, 0, 0, 0);
+    moreLay->addStretch();
+    moreLay->addWidget(loadMoreBtn_, 0, Qt::AlignHCenter);
+    moreLay->addStretch();
+    moreBand->setFixedHeight(60);
+    moreBand->setVisible(false);
 
     auto *resultsPage = new QWidget;
     auto *resLay = new QVBoxLayout(resultsPage);
     resLay->setContentsMargins(0, 0, 0, 0);
     resLay->setSpacing(0);
     resLay->addWidget(table_, 1);
-    resLay->addWidget(status_);
+    resLay->addWidget(moreBand, 0);
 
     // --- loading page (spinner) ---
     auto *loadingPage = new QWidget;
@@ -215,8 +291,6 @@ FoodListPage::FoodListPage(ApiClient *api, Session *session, QWidget *parent)
     emptyMsg_->setObjectName("pageSub");
     emptyMsg_->setAlignment(Qt::AlignHCenter);
     emptyMsg_->setWordWrap(true);
-    // Fixed (not maximum) width so the word-wrapped height is computed correctly;
-    // with only a max width the layout under-sizes the height and lines overlap.
     emptyMsg_->setFixedWidth(340);
     auto *clearBtn = new QPushButton("Clear search", emptyPage);
     clearBtn->setCursor(Qt::PointingHandCursor);
@@ -246,14 +320,13 @@ FoodListPage::FoodListPage(ApiClient *api, Session *session, QWidget *parent)
     cardLay->addWidget(cardStack_);
 
     // Search on button click / Enter; filter changes re-search automatically.
-    // QComboBox::activated only fires on user action, so it won't storm during load().
     connect(searchBtn_, &QPushButton::clicked, this, &FoodListPage::runSearch);
     connect(search_, &QLineEdit::returnPressed, this, &FoodListPage::runSearch);
     connect(category_, &QComboBox::activated, this, [this](int) { runSearch(); });
     connect(diet_, &QComboBox::activated, this, [this](int) { runSearch(); });
     connect(safeOnly_, &QCheckBox::toggled, this, [this](bool) { runSearch(); });
     connect(table_, &QTableWidget::cellActivated, this, [this](int row, int) {
-        if (auto *it = table_->item(row, 0))
+        if (auto *it = table_->item(row, ColImage))
             openDetail(it->data(Qt::UserRole).toInt());
     });
 
@@ -262,8 +335,18 @@ FoodListPage::FoodListPage(ApiClient *api, Session *session, QWidget *parent)
     root->setSpacing(16);
     root->addWidget(title);
     root->addWidget(sub);
+    root->addLayout(srcRow);
     root->addLayout(filters);
     root->addWidget(card, 1);
+}
+
+QString FoodListPage::currentSource() const
+{
+    if (srcRecipe_->isChecked())
+        return "recipe";
+    if (srcGrocery_->isChecked())
+        return "grocery";
+    return "all";
 }
 
 void FoodListPage::load()
@@ -291,10 +374,23 @@ void FoodListPage::loadFilters()
 
 void FoodListPage::runSearch()
 {
+    page_ = 1;
+    fetchPage(false);
+}
+
+void FoodListPage::loadMore()
+{
+    ++page_;
+    fetchPage(true);
+}
+
+void FoodListPage::fetchPage(bool append)
+{
     QUrlQuery query;
     const QString text = search_->text().trimmed();
     if (!text.isEmpty())
         query.addQueryItem("q", text);
+    query.addQueryItem("source", currentSource());
     const QString cat = category_->currentData().toString();
     if (!cat.isEmpty())
         query.addQueryItem("category", cat);
@@ -303,51 +399,75 @@ void FoodListPage::runSearch()
         query.addQueryItem("diet", diet);
     if (safeOnly_->isChecked())
         query.addQueryItem("safe_only", "true");
+    query.addQueryItem("page", QString::number(page_));
 
-    QString path = "/api/foods";
-    if (!query.isEmpty())
-        path += "?" + query.toString(QUrl::FullyEncoded);
+    QString path = "/api/foods?" + query.toString(QUrl::FullyEncoded);
 
-    showLoading();
+    if (append) {
+        loadMoreBtn_->setEnabled(false);
+        loadMoreBtn_->setText("Loading…");
+    } else {
+        showLoading();
+    }
     searchBtn_->setEnabled(false);
-    api_->getJson(path, [this, text](bool ok, const QJsonDocument &body, const QString &err) {
+
+    api_->getJson(path, [this, text, append](bool ok, const QJsonDocument &body, const QString &err) {
         searchBtn_->setEnabled(true);
+        loadMoreBtn_->setEnabled(true);
+        loadMoreBtn_->setText("Load more");
+
         if (!ok) {
+            if (append) {
+                --page_;  // roll back the failed page so the next click retries it
+                return;
+            }
             showEmpty("Couldn't load foods", err);
             return;
         }
         const QJsonObject o = body.object();
         const QJsonArray items = o.value("items").toArray();
-        if (items.isEmpty()) {
+        if (!append && items.isEmpty()) {
             showEmpty("No foods found",
                       text.isEmpty()
-                          ? QStringLiteral("Try searching for a product or brand.")
-                          : QStringLiteral("We couldn't match \"%1\". Try a product or brand name.")
+                          ? QStringLiteral("Try searching for a product, brand, or dish.")
+                          : QStringLiteral("We couldn't match \"%1\". Try another product or dish.")
                                 .arg(text));
             return;
         }
-        populate(items);
-        status_->setText(QStringLiteral("%1 result(s)  ·  source: %2")
-                             .arg(o.value("count").toInt())
-                             .arg(o.value("source").toString()));
-        showResults();
+        populate(items, append);
+        loadMoreBtn_->parentWidget()->setVisible(o.value("has_more").toBool());
+        if (!append)
+            showResults();
     });
 }
 
-void FoodListPage::populate(const QJsonArray &items)
+void FoodListPage::populate(const QJsonArray &items, bool append)
 {
-    table_->setRowCount(0);
-    table_->setRowCount(static_cast<int>(items.size()));
-    int r = 0;
+    int r = append ? table_->rowCount() : 0;
+    if (!append)
+        table_->setRowCount(0);
+    table_->setRowCount(r + static_cast<int>(items.size()));
+
     for (const auto &v : items) {
         const QJsonObject o = v.toObject();
         const QString status = o.value("status").toString();
+        const int id = o.value("id").toInt();
+        const bool isRecipe = o.value("kind").toString() == "recipe";
 
-        auto *name = new QTableWidgetItem(o.value("name").toString());
-        name->setData(Qt::UserRole, o.value("id").toInt());  // food id rides on the row
-        table_->setItem(r, 0, name);
-        table_->setItem(r, 1, new QTableWidgetItem(o.value("brand").toString()));
-        table_->setItem(r, 2, new QTableWidgetItem(o.value("category").toString()));
+        // Image cell (icon set async); the food id rides on this cell for row clicks.
+        auto *img = new QTableWidgetItem();
+        img->setData(Qt::UserRole, id);
+        table_->setItem(r, ColImage, img);
+
+        auto *name = new QTableWidgetItem(tidyName(o.value("name").toString()));
+        table_->setItem(r, ColName, name);
+
+        auto *type = new QTableWidgetItem(isRecipe ? QStringLiteral("Recipe")
+                                                   : QStringLiteral("Grocery"));
+        type->setForeground(isRecipe ? theme::color("brand") : theme::color("ink2"));
+        table_->setItem(r, ColType, type);
+
+        table_->setItem(r, ColBrand, new QTableWidgetItem(o.value("brand").toString()));
 
         const QString contains = joinNames(o.value("contains").toArray());
         const QString may = joinNames(o.value("may_contain").toArray());
@@ -358,12 +478,12 @@ void FoodListPage::populate(const QJsonArray &items)
             parts << QStringLiteral("(may: %1)").arg(may);
         auto *hit = new QTableWidgetItem(parts.join("  "));
         if (!contains.isEmpty())
-            hit->setForeground(QColor("#a5301f"));
+            hit->setForeground(theme::color("unsafeInk"));
         else if (!may.isEmpty())
-            hit->setForeground(QColor("#a65f0f"));
+            hit->setForeground(theme::color("cautionInk"));
         else
-            hit->setForeground(QColor("#9a948b"));
-        table_->setItem(r, 3, hit);
+            hit->setForeground(theme::color("ink3"));
+        table_->setItem(r, ColAllergens, hit);
 
         // Status badge as a (mouse-transparent) pill so row clicks still register.
         auto *cell = new QWidget;
@@ -371,9 +491,37 @@ void FoodListPage::populate(const QJsonArray &items)
         auto *cellLay = new QHBoxLayout(cell);
         cellLay->setContentsMargins(10, 4, 10, 4);
         cellLay->addWidget(badge::make(status), 0, Qt::AlignLeft | Qt::AlignVCenter);
-        table_->setCellWidget(r, 4, cell);
+        table_->setCellWidget(r, ColStatus, cell);
+
+        loadThumb(r, o.value("image_url").toString());
         ++r;
     }
+}
+
+void FoodListPage::loadThumb(int row, const QString &url)
+{
+    if (url.isEmpty())
+        return;
+    // Capture the food id so a late reply that lands after the list was rebuilt (or
+    // paged) is dropped instead of decorating the wrong row.
+    auto *item = table_->item(row, ColImage);
+    if (!item)
+        return;
+    const int expectId = item->data(Qt::UserRole).toInt();
+
+    QNetworkReply *reply = imgNam_->get(QNetworkRequest(QUrl(url)));
+    connect(reply, &QNetworkReply::finished, this, [this, reply, row, expectId]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError)
+            return;
+        QPixmap pm;
+        if (!pm.loadFromData(reply->readAll()))
+            return;
+        auto *it = table_->item(row, ColImage);
+        if (!it || it->data(Qt::UserRole).toInt() != expectId)
+            return;  // row was reused for a different food; ignore
+        it->setIcon(QIcon(pm.scaled(38, 38, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+    });
 }
 
 void FoodListPage::showResults() { cardStack_->setCurrentIndex(0); }
@@ -382,6 +530,7 @@ void FoodListPage::showLoading() { cardStack_->setCurrentIndex(1); }  // spinner
 
 void FoodListPage::showEmpty(const QString &title, const QString &message)
 {
+    loadMoreBtn_->parentWidget()->setVisible(false);
     emptyTitle_->setText(title);
     emptyMsg_->setText(message);
     cardStack_->setCurrentIndex(2);

@@ -1,0 +1,12 @@
+{
+  "app": {
+    "threads_num": 2
+  },
+  "custom_config": {
+    "jwt_expiry_hours": 1,
+    "off_base_url": "https://uk.openfoodfacts.org",
+    "off_user_agent": "Foodi/1.0 (contact@example.com)",
+    "reset_code_ttl_minutes": 30,
+    "smtp_enabled": false
+  }
+}

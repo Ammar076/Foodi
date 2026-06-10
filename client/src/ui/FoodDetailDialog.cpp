@@ -14,6 +14,7 @@
 #include <QVBoxLayout>
 
 #include "ui/StatusBadge.h"
+#include "ui/Theme.h"
 
 namespace {
 QString joinNames(const QJsonArray &arr)
@@ -38,7 +39,9 @@ FoodDetailDialog::FoodDetailDialog(const QJsonObject &food, QWidget *parent)
 {
     const QString name = food.value("name").toString();
     setObjectName("detailDialog");
-    setStyleSheet("QDialog#detailDialog { background: #ffffff; }");  // white modal surface
+    // Modal surface follows the active theme (white in light, dark in dark).
+    setStyleSheet(QStringLiteral("QDialog#detailDialog { background: %1; }")
+                      .arg(theme::color("surface").name()));
     setWindowTitle(name + " — Foodi");
     setMinimumWidth(600);
 
@@ -46,6 +49,7 @@ FoodDetailDialog::FoodDetailDialog(const QJsonObject &food, QWidget *parent)
     const QString brand = food.value("brand").toString();
     const QString category = food.value("category").toString();
     const QString diet = food.value("diet").toString();
+    const bool isRecipe = food.value("kind").toString() == "recipe";
 
     // --- left: product image ---
     image_ = new QLabel(this);
@@ -110,6 +114,11 @@ FoodDetailDialog::FoodDetailDialog(const QJsonObject &food, QWidget *parent)
         vTitle->setText("Safe — none of your allergens detected");
         vSub->setText("Checked against your profile. Always read the pack to be sure.");
     }
+    // Recipes carry no structured allergen tags, so their verdict is inferred from
+    // the ingredient list — be honest that it's a best-effort check.
+    if (isRecipe)
+        vSub->setText(vSub->text() +
+                      "  Allergens for recipes are estimated from the ingredient list.");
     auto *vText = new QVBoxLayout;
     vText->setSpacing(2);
     vText->addWidget(vTitle);
@@ -145,7 +154,10 @@ FoodDetailDialog::FoodDetailDialog(const QJsonObject &food, QWidget *parent)
     pillsRow->addStretch();
 
     // --- footer ---
-    auto *source = new QLabel("Source: Open Food Facts", this);
+    auto *source = new QLabel(
+        isRecipe ? QStringLiteral("Source: Spoonacular")
+                 : QStringLiteral("Source: Open Food Facts"),
+        this);
     source->setObjectName("statusText");
     source->setProperty("tone", "neutral");
     auto *closeBtn = new QPushButton("Close", this);
@@ -179,7 +191,7 @@ FoodDetailDialog::FoodDetailDialog(const QJsonObject &food, QWidget *parent)
 
     auto *line = new QFrame(this);
     line->setFrameShape(QFrame::HLine);
-    line->setStyleSheet("color: #e4ded3;");
+    line->setStyleSheet(QStringLiteral("color: %1;").arg(theme::color("border").name()));
 
     auto *root = new QVBoxLayout(this);
     root->setContentsMargins(24, 24, 24, 24);

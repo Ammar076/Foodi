@@ -37,13 +37,13 @@ void Spinner::paintEvent(QPaintEvent *)
     const QRectF box(w, w, size_ - 2 * w, size_ - 2 * w);
 
     // faint full ring
-    QPen base(QColor("#e4ded3"), w);
+    QPen base(theme::color("border"), w);
     base.setCapStyle(Qt::RoundCap);
     p.setPen(base);
     p.drawArc(box, 0, 360 * 16);
 
     // rotating teal arc (~270°)
-    QPen arc(QColor(theme::kBrand), w);
+    QPen arc(theme::color("brand"), w);
     arc.setCapStyle(Qt::RoundCap);
     p.setPen(arc);
     p.drawArc(box, -angle_ * 16, -270 * 16);

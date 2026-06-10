@@ -8,6 +8,7 @@
 
 #include "services/FoodIngest.h"
 #include "services/OffClient.h"
+#include "services/SpoonacularClient.h"
 #include "util/Responses.h"
 
 using namespace drogon;
@@ -72,6 +73,13 @@ void FoodController::search(const HttpRequestPtr &req,
     std::string q = req->getParameter("q");
     std::string category = req->getParameter("category");
     std::string diet = req->getParameter("diet");
+    // source = all | grocery | recipe. Groceries come from Open Food Facts,
+    // recipes from Spoonacular; "all" merges both.
+    std::string source = req->getParameter("source");
+    if (source.empty())
+        source = "all";
+    const bool wantGrocery = (source == "all" || source == "grocery");
+    const bool wantRecipe = (source == "all" || source == "recipe");
     // Pass as int (0/1), not bool: Drogon's binary bool binding misaligns params.
     int safeOnly = req->getParameter("safe_only") == "true" ? 1 : 0;
     int page = std::max(1, atoiOr(req->getParameter("page"), 1));
@@ -79,21 +87,37 @@ void FoodController::search(const HttpRequestPtr &req,
     int offset = (page - 1) * pageSize;
 
     auto db = app().getDbClient();
-    bool fetched = false;
     try {
-        // Cache-first: if nothing matches q locally, pull from OFF once and cache it.
+        // Cache-first, per source: if nothing of that kind matches q locally, pull a
+        // pool from the external API once and cache it. Later pages (Load more) are
+        // served from that cached pool, so we don't re-hit the API per page.
         if (!q.empty()) {
-            auto c = db->execSqlSync(
-                "SELECT count(*) AS n FROM food_items WHERE name ILIKE '%' || $1 || '%'", q);
-            if (c[0]["n"].as<int64_t>() == 0) {
-                try {
-                    auto prods = OffClient::instance().search(q, 20);
-                    if (!prods.empty()) {
-                        ingest::ingest(prods);
-                        fetched = true;
+            if (wantGrocery) {
+                auto c = db->execSqlSync(
+                    "SELECT count(*) AS n FROM food_items "
+                    "WHERE kind = 'grocery' AND name ILIKE '%' || $1 || '%'", q);
+                if (c[0]["n"].as<int64_t>() == 0) {
+                    try {
+                        auto prods = OffClient::instance().search(q, 25);
+                        if (!prods.empty())
+                            ingest::ingest(prods);
+                    } catch (const std::exception &e) {
+                        LOG_WARN << "OFF fetch failed: " << e.what();
                     }
-                } catch (const std::exception &e) {
-                    LOG_WARN << "OFF fetch failed: " << e.what();
+                }
+            }
+            if (wantRecipe && SpoonacularClient::instance().enabled()) {
+                auto c = db->execSqlSync(
+                    "SELECT count(*) AS n FROM food_items "
+                    "WHERE kind = 'recipe' AND name ILIKE '%' || $1 || '%'", q);
+                if (c[0]["n"].as<int64_t>() == 0) {
+                    try {
+                        auto recipes = SpoonacularClient::instance().search(q, 25);
+                        if (!recipes.empty())
+                            ingest::ingestRecipes(recipes);
+                    } catch (const std::exception &e) {
+                        LOG_WARN << "Spoonacular fetch failed: " << e.what();
+                    }
                 }
             }
         }
@@ -104,7 +128,7 @@ void FoodController::search(const HttpRequestPtr &req,
         // binary-binding issue with mixed int params and keeps injection off the table.
         const std::string uid = std::to_string(userId);
         std::string sql =
-            "SELECT f.id, f.name, f.brand, f.category, f.diet, f.image_url, "
+            "SELECT f.id, f.name, f.brand, f.category, f.diet, f.image_url, f.kind, "
             "       string_agg(DISTINCT ca.display_name, '|') AS contains_names, "
             "       string_agg(DISTINCT ta.display_name, '|') AS trace_names "
             "FROM food_items f "
@@ -117,6 +141,11 @@ void FoodController::search(const HttpRequestPtr &req,
             "WHERE ($1 = '' OR f.name ILIKE '%' || $1 || '%') "
             "  AND ($2 = '' OR f.category = $2) "
             "  AND ($3 = '' OR f.diet = $3) ";
+        // Kind filter (server-controlled literal; no user input inlined).
+        if (wantGrocery && !wantRecipe)
+            sql += "AND f.kind = 'grocery' ";
+        else if (wantRecipe && !wantGrocery)
+            sql += "AND f.kind = 'recipe' ";
         if (safeOnly) {
             sql +=
                 "AND NOT EXISTS (SELECT 1 FROM food_contains x "
@@ -126,13 +155,19 @@ void FoodController::search(const HttpRequestPtr &req,
                 "JOIN user_allergens u ON u.allergen_id = y.allergen_id AND u.user_id = " + uid + " "
                 "WHERE y.food_id = f.id) ";
         }
-        sql += "GROUP BY f.id ORDER BY f.name LIMIT " + std::to_string(pageSize) +
+        // Fetch one extra row to learn whether a further page exists (Load more),
+        // without a separate COUNT query.
+        sql += "GROUP BY f.id ORDER BY f.name LIMIT " + std::to_string(pageSize + 1) +
                " OFFSET " + std::to_string(offset);
 
         auto rows = db->execSqlSync(sql, q, category, diet);
+        const bool hasMore = static_cast<int>(rows.size()) > pageSize;
 
         Json::Value items(Json::arrayValue);
+        int n = 0;
         for (const auto &row : rows) {
+            if (n++ >= pageSize)
+                break;  // the extra probe row is not returned
             std::string cont = fieldStr(row, "contains_names");
             std::string tr = fieldStr(row, "trace_names");
             Json::Value it;
@@ -142,6 +177,7 @@ void FoodController::search(const HttpRequestPtr &req,
             it["category"] = fieldStr(row, "category");
             it["diet"] = fieldStr(row, "diet");
             it["image_url"] = fieldStr(row, "image_url");
+            it["kind"] = fieldStr(row, "kind");
             it["contains"] = pipeToArray(cont);
             it["may_contain"] = pipeToArray(tr);
             it["status"] = statusFor(!cont.empty(), !tr.empty());
@@ -152,7 +188,7 @@ void FoodController::search(const HttpRequestPtr &req,
         out["page"] = page;
         out["page_size"] = pageSize;
         out["count"] = static_cast<int>(items.size());
-        out["source"] = fetched ? "openfoodfacts+cache" : "cache";
+        out["has_more"] = hasMore;
         out["items"] = items;
         callback(HttpResponse::newHttpJsonResponse(out));
     } catch (const orm::DrogonDbException &e) {
@@ -202,7 +238,7 @@ void FoodController::detail(const HttpRequestPtr &req,
     auto db = app().getDbClient();
     try {
         auto f = db->execSqlSync(
-            "SELECT id, name, brand, category, diet, ingredients_text, image_url "
+            "SELECT id, name, brand, category, diet, ingredients_text, image_url, kind "
             "FROM food_items WHERE id = $1",
             fid);
         if (f.size() == 0) {
@@ -238,6 +274,7 @@ void FoodController::detail(const HttpRequestPtr &req,
         out["diet"] = fieldStr(row, "diet");
         out["ingredients_text"] = fieldStr(row, "ingredients_text");
         out["image_url"] = fieldStr(row, "image_url");
+        out["kind"] = fieldStr(row, "kind");
         out["contains"] = namesArray(containsAll);
         out["traces"] = namesArray(tracesAll);
 

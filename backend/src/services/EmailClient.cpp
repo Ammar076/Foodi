@@ -70,14 +70,19 @@ EmailClient::EmailClient()
     // exit (same as OffClient).
     curl_global_init(CURL_GLOBAL_DEFAULT);
 
+    // Each field takes an env override (FOODI_SMTP_*) over config.json, so a hosted
+    // deployment can configure SMTP entirely via env without baking the sender
+    // address or password into the image.
     const auto &cfg = app().getCustomConfig();
-    enabled_ = cfg.get("smtp_enabled", false).asBool();
-    host_ = cfg.get("smtp_host", "").asString();
-    port_ = cfg.get("smtp_port", 587).asInt();
-    security_ = cfg.get("smtp_security", "starttls").asString();
-    user_ = cfg.get("smtp_user", "").asString();
-    from_ = cfg.get("smtp_from", user_).asString();
-    fromName_ = cfg.get("smtp_from_name", "Foodi").asString();
+    const std::string enabledEnv = envOr("FOODI_SMTP_ENABLED", "");
+    enabled_ = enabledEnv.empty() ? cfg.get("smtp_enabled", false).asBool()
+                                  : (enabledEnv == "true" || enabledEnv == "1");
+    host_ = envOr("FOODI_SMTP_HOST", cfg.get("smtp_host", "").asString());
+    port_ = std::stoi(envOr("FOODI_SMTP_PORT", std::to_string(cfg.get("smtp_port", 587).asInt())));
+    security_ = envOr("FOODI_SMTP_SECURITY", cfg.get("smtp_security", "starttls").asString());
+    user_ = envOr("FOODI_SMTP_USER", cfg.get("smtp_user", "").asString());
+    from_ = envOr("FOODI_SMTP_FROM", cfg.get("smtp_from", user_).asString());
+    fromName_ = envOr("FOODI_SMTP_FROM_NAME", cfg.get("smtp_from_name", "Foodi").asString());
     password_ = envOr("FOODI_SMTP_PASSWORD", cfg.get("smtp_password", "").asString());
 }
 

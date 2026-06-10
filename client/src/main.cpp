@@ -18,6 +18,11 @@ int main(int argc, char *argv[])
     theme::apply(app);  // Fusion base + light palette + foodi.qss + app icon
 
     Session session;
+    // Runtime override of the baked-in backend URL (handy for testing a release
+    // build against a local server, or pointing at a different deployment).
+    const QString envUrl = qEnvironmentVariable("FOODI_API_URL");
+    if (!envUrl.isEmpty())
+        session.baseUrl = envUrl;
     ApiClient api(&session);
 
     LoginWindow login(&api, &session);
