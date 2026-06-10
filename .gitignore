@@ -1,10 +1,14 @@
 # Build output
 build/
+build-release/
 out/
 cmake-build-*/
 backend/build/
 client/build/
 *.log
+
+# Release staging / packaged artifacts
+dist/
 
 # vcpkg
 vcpkg_installed/
