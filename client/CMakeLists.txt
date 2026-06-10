@@ -13,7 +13,10 @@ set(CMAKE_AUTORCC ON)
 # Qt is found via CMAKE_PREFIX_PATH (see CMakePresets.json -> your Qt msvc2022_64 dir).
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 
-add_executable(foodi_client
+# WIN32 = build as a GUI-subsystem app so Windows doesn't pop a console window
+# alongside the UI. Qt's EntryPoint (linked via Qt6::Widgets) provides the WinMain
+# shim, so the standard int main(int, char**) still works. Ignored on non-Windows.
+add_executable(foodi_client WIN32
     src/main.cpp
     src/net/ApiClient.cpp
     src/ui/LoginWindow.cpp
