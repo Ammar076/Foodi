@@ -12,13 +12,17 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QNetworkAccessManager>
+#include <QNetworkDiskCache>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QPixmap>
+#include <QPixmapCache>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QResizeEvent>
 #include <QScrollBar>
 #include <QStackedWidget>
+#include <QStandardPaths>
 #include <QStringList>
 #include <QTableWidget>
 #include <QUrl>
@@ -62,6 +66,25 @@ QString tidyName(const QString &s)
             w[0] = w[0].toUpper();
     }
     return words.join(' ');
+}
+
+// The list renders thumbnails at ~38px, but the sources hand back much larger
+// images (OFF 400px, Spoonacular 312px). Rewrite the URL to the smallest variant
+// each CDN offers so downloads are a fraction of the size. Unknown hosts pass
+// through unchanged. (The detail dialog still uses the full-size stored URL.)
+QString thumbUrl(const QString &url)
+{
+    QString u = url;
+    if (u.contains("openfoodfacts.org")) {
+        static const QRegularExpression re(R"(\.(\d+|full)\.jpg$)",
+                                           QRegularExpression::CaseInsensitiveOption);
+        u.replace(re, ".100.jpg");
+    } else if (u.contains("img.spoonacular.com")) {
+        static const QRegularExpression re(R"(-\d+x\d+\.(jpg|png)$)",
+                                           QRegularExpression::CaseInsensitiveOption);
+        u.replace(re, "-90x90.\\1");
+    }
+    return u;
 }
 
 // Column indices for the results table.
@@ -166,6 +189,14 @@ FoodListPage::FoodListPage(ApiClient *api, Session *session, QWidget *parent)
     : QWidget(parent), api_(api), session_(session),
       imgNam_(new QNetworkAccessManager(this))
 {
+    // Persistent on-disk cache for thumbnails: repeat searches and paging back
+    // don't re-hit the CDNs, and the cache survives app restarts.
+    auto *cache = new QNetworkDiskCache(imgNam_);
+    cache->setCacheDirectory(
+        QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/thumbs");
+    cache->setMaximumCacheSize(64LL * 1024 * 1024);  // 64 MB
+    imgNam_->setCache(cache);
+
     // --- page heading ---
     auto *title = new QLabel("Foods", this);
     title->setObjectName("pageTitle");
@@ -500,27 +531,45 @@ void FoodListPage::populate(const QJsonArray &items, bool append)
 
 void FoodListPage::loadThumb(int row, const QString &url)
 {
-    if (url.isEmpty())
-        return;
-    // Capture the food id so a late reply that lands after the list was rebuilt (or
-    // paged) is dropped instead of decorating the wrong row.
     auto *item = table_->item(row, ColImage);
     if (!item)
         return;
+    // Show the placeholder immediately; it stays for foods with no photo and is
+    // replaced in-place once a real thumbnail arrives.
+    item->setIcon(QIcon(theme::thumbPlaceholder(38)));
+    if (url.isEmpty())
+        return;
+
+    const QString small = thumbUrl(url);
+
+    // In-memory cache: a thumbnail we've already decoded this session goes straight
+    // to the cell with no network or disk hit.
+    QPixmap cached;
+    if (QPixmapCache::find(small, &cached)) {
+        item->setIcon(QIcon(cached));
+        return;
+    }
+
+    // Capture the food id so a late reply that lands after the list was rebuilt (or
+    // paged) is dropped instead of decorating the wrong row.
     const int expectId = item->data(Qt::UserRole).toInt();
 
-    QNetworkReply *reply = imgNam_->get(QNetworkRequest(QUrl(url)));
-    connect(reply, &QNetworkReply::finished, this, [this, reply, row, expectId]() {
+    QNetworkRequest req((QUrl(small)));
+    req.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::PreferCache);
+    QNetworkReply *reply = imgNam_->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, row, expectId, small]() {
         reply->deleteLater();
         if (reply->error() != QNetworkReply::NoError)
             return;
         QPixmap pm;
         if (!pm.loadFromData(reply->readAll()))
             return;
+        const QPixmap scaled = pm.scaled(38, 38, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        QPixmapCache::insert(small, scaled);
         auto *it = table_->item(row, ColImage);
         if (!it || it->data(Qt::UserRole).toInt() != expectId)
             return;  // row was reused for a different food; ignore
-        it->setIcon(QIcon(pm.scaled(38, 38, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+        it->setIcon(QIcon(scaled));
     });
 }
 

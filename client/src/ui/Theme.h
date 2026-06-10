@@ -43,4 +43,8 @@ QIcon searchIcon(int px = 16);
 // A muted "empty" glyph (card with lines) for the no-results state.
 QPixmap emptyGlyph(int px = 36);
 
+// A muted thumbnail placeholder (rounded tile + image glyph), shown for foods with
+// no photo and while a real thumbnail is still loading.
+QPixmap thumbPlaceholder(int px = 38);
+
 }  // namespace theme

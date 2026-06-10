@@ -277,4 +277,39 @@ QPixmap emptyGlyph(int px)
     return pm;
 }
 
+QPixmap thumbPlaceholder(int px)
+{
+    const qreal dpr = qApp ? qApp->devicePixelRatio() : 1.0;
+    QPixmap pm(QSize(px, px) * dpr);
+    pm.setDevicePixelRatio(dpr);
+    pm.fill(Qt::transparent);
+
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    // muted rounded tile background
+    const qreal r = px * 0.22;
+    QPainterPath tile;
+    tile.addRoundedRect(QRectF(0.5, 0.5, px - 1, px - 1), r, r);
+    p.fillPath(tile, color("imgBg"));
+
+    // image glyph: a small sun + mountain in a muted ink, on the 28-unit grid
+    QPen pen(color("ink3"), px * 0.07);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    p.setPen(pen);
+    p.setBrush(Qt::NoBrush);
+    const qreal s = px / 28.0;
+    p.drawEllipse(QPointF(10 * s, 10 * s), 2.2 * s, 2.2 * s);
+    QPainterPath m;
+    m.moveTo(6 * s, 21 * s);
+    m.lineTo(13 * s, 14 * s);
+    m.lineTo(17 * s, 18 * s);
+    m.lineTo(19 * s, 16 * s);
+    m.lineTo(23 * s, 21 * s);
+    p.drawPath(m);
+    p.end();
+    return pm;
+}
+
 }  // namespace theme
